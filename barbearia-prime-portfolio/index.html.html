@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barbearia Prime — Premium</title>
+<style>
+:root{--bg:#11110f;--panel:#1c1b18;--gold:#c9a66b;--text:#f5f0e7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Arial,sans-serif}header{padding:25px;text-align:center;border-bottom:1px solid #413a30;letter-spacing:3px;color:var(--gold);font-size:25px;font-weight:800}main{max-width:760px;margin:45px auto;padding:0 18px}h1{font-size:clamp(30px,5vw,45px);margin:0 0 8px}p{color:#c7c0b4}.card{margin-top:25px;background:var(--panel);border:1px solid #433a2d;border-radius:18px;padding:26px}label{display:block;font-weight:bold;margin:17px 0 7px}input,select,button{font:inherit;border-radius:9px}input,select{width:100%;padding:13px;background:#292721;color:var(--text);border:1px solid #675a46}button{padding:12px 14px;cursor:pointer;border:1px solid var(--gold)}button:disabled{opacity:.45;cursor:not-allowed}.slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:9px;margin-top:12px}.slot{background:transparent;color:var(--gold)}.slot[aria-pressed=true]{background:var(--gold);color:#111;font-weight:bold}.submit{width:100%;margin-top:24px;background:var(--gold);color:#111;font-weight:bold}#status{margin-top:18px;min-height:24px;overflow-wrap:anywhere}.error{color:#ffb0a7}.success{color:#b9e6ba}footer{text-align:center;padding:35px;color:#a6a096}small{color:#b6ae9f}
+</style>
+</head>
+<body>
+<div style="
+  background: #fff3cd;
+  color: #664d03;
+  text-align: center;
+  padding: 12px 16px;
+  font: 14px Arial, sans-serif;
+  line-height: 1.5;
+">
+  <strong>Site demonstrativo.</strong>
+  Os agendamentos feitos aqui são fictícios e não correspondem a reservas reais.
+  Não informe dados pessoais verdadeiros.
+</div>
+<header>BARBEARIA PRIME</header>
+<main><h1>Seu próximo corte começa aqui.</h1><p>Escolha um serviço, uma data e um horário para solicitar sua reserva.</p>
+<form class="card" id="booking">
+<label for="barber">Profissional</label><select id="barber" required></select>
+<label for="service">Serviço</label><select id="service" required></select>
+<label for="date">Data</label><input id="date" type="date" required>
+<label>Horários disponíveis</label><div class="slots" id="slots">Carregando...</div>
+<label for="name">Seu nome</label><input id="name" autocomplete="name" maxlength="80" required>
+<label for="phone">WhatsApp com DDD</label><input id="phone" type="tel" autocomplete="tel" maxlength="20" placeholder="41999999999" required>
+<button class="submit" id="submit" type="submit" disabled>Solicitar agendamento</button>
+<div id="status" role="status" aria-live="polite"></div>
+<small>Protótipo de portfólio. Use apenas informações fictícias; nenhuma reserva corresponde a um atendimento real.</small>
+</form></main><footer>Barbearia Prime — Demonstração de portfólio</footer>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// EDITE APENAS AS DUAS LINHAS ABAIXO:
+const SUPABASE_URL = "https://sgfktsmmzkeucvbcjcfe.supabase.co";
+const SUPABASE_PUBLIC_KEY = "sb_publishable_ascxshD8jfdnlxPm_Qfj1A_EtW6S2u9";
+
+const $ = id => document.getElementById(id);
+const barber=$('barber'),service=$('service'),date=$('date'),slots=$('slots'),submit=$('submit'),status=$('status');
+let client,selected=null,requestNumber=0;
+function message(text,kind=''){status.textContent=text;status.className=kind;}
+function saoPauloDate(d){const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);const v=k=>parts.find(x=>x.type===k).value;return `${v('year')}-${v('month')}-${v('day')}`;}
+function saoPauloTime(iso){return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(iso));}
+function option(select,id,text){const el=document.createElement('option');el.value=id;el.textContent=text;select.appendChild(el);}
+async function loadCatalog(){message('Carregando serviços...');const {data,error}=await client.rpc('catalogo_publico');if(error)throw error;barber.replaceChildren();service.replaceChildren();for(const b of data.barbeiros||[])option(barber,b.id,b.nome);for(const s of data.servicos||[])option(service,s.id,`${s.nome} — ${Number(s.preco).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})} (${s.duracao_minutos} min)`);if(!barber.value||!service.value)throw Error('Não há profissionais ou serviços ativos.');message('');await loadSlots();}
+async function loadSlots(){const thisRequest=++requestNumber;selected=null;submit.disabled=true;slots.textContent='Consultando horários...';message('');if(!barber.value||!service.value||!date.value){slots.textContent='Selecione um serviço e uma data.';return;}const {data,error}=await client.rpc('horarios_disponiveis',{p_barbeiro_id:Number(barber.value),p_servico_id:Number(service.value),p_data:date.value});if(thisRequest!==requestNumber)return;if(error){slots.textContent='Não foi possível consultar horários.';message(error.message,'error');return;}slots.replaceChildren();if(!data?.length){slots.textContent='Não há horários livres nessa data.';return;}for(const item of data){const btn=document.createElement('button');btn.type='button';btn.className='slot';btn.textContent=saoPauloTime(item.inicio);btn.setAttribute('aria-pressed','false');btn.addEventListener('click',()=>{selected=item.inicio;for(const other of slots.querySelectorAll('button'))other.setAttribute('aria-pressed','false');btn.setAttribute('aria-pressed','true');submit.disabled=false;});slots.appendChild(btn);}}
+async function book(event){event.preventDefault();if(!selected)return message('Selecione um horário.','error');const chosen=selected;submit.disabled=true;message('Enviando solicitação...');const {data,error}=await client.rpc('criar_agendamento',{p_barbeiro_id:Number(barber.value),p_servico_id:Number(service.value),p_cliente_nome:$('name').value.trim(),p_cliente_telefone:$('phone').value,p_inicio:chosen});if(error){await loadSlots();message('Não foi possível reservar: '+error.message,'error');return;}$('name').value='';$('phone').value='';await loadSlots();message(`Solicitação nº ${data} registrada! Horário reservado, aguardando confirmação.`, 'success');}
+barber.addEventListener('change',loadSlots);service.addEventListener('change',loadSlots);date.addEventListener('change',loadSlots);$('booking').addEventListener('submit',book);
+const today=saoPauloDate(new Date());date.min=today;const future=new Date();future.setDate(future.getDate()+59);date.max=saoPauloDate(future);date.value=today;
+if(SUPABASE_URL.includes('COLE_AQUI')||SUPABASE_PUBLIC_KEY.includes('COLE_AQUI')){slots.textContent='Configure a URL e a chave pública no arquivo HTML.';message('Abra este arquivo no Bloco de Notas e substitua COLE_AQUI_A_PROJECT_URL e COLE_AQUI_A_CHAVE_PUBLICA.','error');}else if(!window.supabase){message('Não foi possível carregar a biblioteca do Supabase. Verifique sua internet.','error');}else{try{client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLIC_KEY);loadCatalog().catch(e=>{slots.textContent='Verifique a conexão com o Supabase.';message(e.message,'error');});}catch(e){message(e.message,'error');}}
+</script>
+</body></html>
